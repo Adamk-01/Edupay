@@ -1,11 +1,39 @@
+# Node / frontend build artifacts
 node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+.vite/
+**/.vite/
+
+# Python runtime artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+venv/
+**/venv/
+.venv/
+**/.venv/
+
+# Environment and secrets
 .env
 .env.*
 **/.env
 **/.env.*
-dist/
-build/
-__pycache__/
-*.pyc
-venv/
-.venv/
+
+# Local upload and runtime data
+uploads/
+**/uploads/
+!uploads/.gitkeep
+
+# IDE / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

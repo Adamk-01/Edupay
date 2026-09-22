@@ -18,7 +18,7 @@ from app.routers.news         import NewsPost                              # noq
 from app.routers.consultation import Consultant, ConsultationSession       # noqa
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

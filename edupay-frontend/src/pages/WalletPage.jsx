@@ -11,7 +11,7 @@ export default function WalletPage({ toast }) {
     const { data, loading, refetch } = useApi(() => walletApi.getWallet());
     return { wallet: data, loading, refetch };
   })();
-  const { data: txData, loading: txLoad } = useApi(() => walletApi.getTransactions({ limit: 10 }));
+  const { data: txData, loading: txLoad, refetch: refetchTx } = useApi(() => walletApi.getTransactions({ limit: 10 }));
   const [amount,  setAmount]  = useState("");
   const [method,  setMethod]  = useState("card");
   const [funding, setFunding] = useState(false);
@@ -50,14 +50,15 @@ export default function WalletPage({ toast }) {
           : <div className="wallet-amount">₦{fmt(wallet?.balance)}</div>}
         <div className="wallet-sub">Wallet ID: {wallet?.id ? String(wallet.id).slice(0, 12).toUpperCase() : "—"}</div>
         <div className="wallet-actions">
-          <button className="wallet-btn primary"><Plus size={14}/>Fund Wallet</button>
-          <button className="wallet-btn ghost"><Send size={14}/>Withdraw</button>
-          <button className="wallet-btn ghost"><Download size={14}/>Statement</button>
+          <button className="wallet-btn primary" onClick={() => document.getElementById("fund-card")?.scrollIntoView({ behavior: "smooth" })}><Plus size={14}/>Fund Wallet</button>
+          <button className="wallet-btn ghost" onClick={() => { refetch(); refetchTx(); }}><RefreshCw size={14}/>Refresh Balance</button>
+          <button className="wallet-btn ghost" onClick={() => toast("Statement download feature coming soon", "info")}><Download size={14}/>Statement</button>
         </div>
       </div>
 
       <div className="grid-2">
-        <div className="card card-pad">
+        <div className="card card-pad" id="fund-card">
+
           <div className="card-title" style={{ marginBottom: 18 }}>Fund Wallet</div>
           <div className="form-group">
             <div className="form-label">Quick Amount</div>

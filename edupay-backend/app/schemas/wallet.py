@@ -10,8 +10,8 @@ class FundWalletRequest(BaseModel):
 
 
 class FundWalletResponse(BaseModel):
-    authorization_url: str
-    access_code:       str
+    authorization_url: Optional[str] = None
+    access_code:       Optional[str] = None
     reference:         str
 
 

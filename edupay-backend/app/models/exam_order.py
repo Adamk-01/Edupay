@@ -1,6 +1,6 @@
 import uuid
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, Numeric, DateTime, ForeignKey, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -37,7 +37,7 @@ class ExamOrder(Base):
     status       = Column(Enum(OrderStatus), default=OrderStatus.pending)
     pins_data    = Column(String, nullable=True)   # JSON list of PINs
     reference    = Column(String, unique=True, nullable=False)
-    created_at   = Column(DateTime, default=datetime.utcnow)
-    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="exam_orders")

@@ -1,6 +1,6 @@
 import uuid
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text
@@ -32,8 +32,8 @@ class NewsPost(Base):
     is_published   = Column(Boolean, default=False)
     is_featured    = Column(Boolean, default=False)
     views          = Column(Integer, default=0)
-    created_at     = Column(DateTime, default=datetime.utcnow)
-    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at     = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at     = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 # ── Schemas ───────────────────────────────────────────────────
@@ -152,7 +152,7 @@ async def publish_post(post_id: str, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     post.is_published = True
-    post.updated_at   = datetime.utcnow()
+    post.updated_at   = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Published"}
 
@@ -165,7 +165,7 @@ async def update_post(post_id: str, payload: dict, db: Session = Depends(get_db)
     for k, v in payload.items():
         if hasattr(post, k) and k not in ("id", "slug", "views"):
             setattr(post, k, v)
-    post.updated_at = datetime.utcnow()
+    post.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Updated"}
 

@@ -1,15 +1,15 @@
 // src/components/Topbar.jsx
 import { useState, useRef, useEffect } from "react";
-import { Bell, HelpCircle, CheckCheck, X, MessageSquare, PhoneCall, FileQuestion, ExternalLink } from "lucide-react";
+import { Bell, HelpCircle, CheckCheck, X, MessageSquare, PhoneCall, FileQuestion, ExternalLink, Menu } from "lucide-react";
 import { NAV_ITEMS } from "./Sidebar";
 
 const MOCK_NOTIFS = [
   { id: 1, title: "Order Completed", msg: "Your WAEC Result PIN (Serial: W2026-9901) was issued successfully.", time: "10 mins ago", read: false },
-  { id: 2, title: "Wallet Funded", msg: "Wallet top-up of ₦15,000.00 via Paystack received.", time: "2 hours ago", read: false },
+  { id: 2, title: "Wallet Funded", msg: "Wallet top-up of ₦15,000.00 via Monnify received.", time: "2 hours ago", read: false },
   { id: 3, title: "Admission News Alert", msg: "JAMB 2026 Direct Entry Cut-off marks released. Check Edu News.", time: "1 day ago", read: true },
 ];
 
-export default function Topbar({ page, user }) {
+export default function Topbar({ page, user, onToggleMenu }) {
   const [showNotif, setShowNotif] = useState(false);
   const [showHelp, setShowHelp]   = useState(false);
   const [notifs, setNotifs]       = useState(MOCK_NOTIFS);
@@ -39,9 +39,18 @@ export default function Topbar({ page, user }) {
 
   return (
     <div className="topbar">
-      <div>
-        <div className="topbar-title">{found?.label || "EduPay"}</div>
-        <div className="topbar-sub">Good day, {firstName}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+        <button 
+          className="mobile-menu-btn" 
+          onClick={onToggleMenu}
+          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text)" }}
+        >
+          <Menu size={24}/>
+        </button>
+        <div>
+          <div className="topbar-title">{found?.label || "EduPay"}</div>
+          <div className="topbar-sub">Good day, {firstName}</div>
+        </div>
       </div>
 
       <div className="topbar-actions" style={{ position: "relative" }} ref={notifRef}>

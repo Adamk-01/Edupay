@@ -1,16 +1,20 @@
 import uuid
 import json
+import logging
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user       import User
 from app.models.wallet     import Wallet, Transaction, TransactionType, TransactionStatus
 from app.models.exam_order import ExamOrder, ExamType, OrderStatus
-from app.dependencies      import get_current_user
+from app.dependencies      import get_current_user, require_verified
+from app.services.email_service import send_order_confirmation
 
 router = APIRouter(prefix="/exams", tags=["Exam Services"])
+logger = logging.getLogger(__name__)
 
 EXAM_PRICES: dict[ExamType, Decimal] = {
     ExamType.JAMB_EPIN:   Decimal("4700"),
@@ -42,7 +46,7 @@ async def place_order(
     quantity:  int,
     phone:     str,
     email:     str,
-    current_user: User    = Depends(get_current_user),
+    current_user: User    = Depends(require_verified),
     db:           Session = Depends(get_db),
 ):
     try:
@@ -99,6 +103,12 @@ async def place_order(
     order.pins_data = json.dumps(pins)
     order.status    = OrderStatus.completed
     db.commit()
+
+    await run_in_threadpool(
+        send_order_confirmation,
+        current_user.email, current_user.full_name,
+        reference, f"{exam_enum.value} x{quantity}",
+    )
 
     return {
         "order_id":  str(order.id),

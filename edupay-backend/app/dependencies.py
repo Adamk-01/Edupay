@@ -43,3 +43,19 @@ def get_current_admin(
             detail="Admin access required",
         )
     return current_user
+
+
+from app.core.config import settings
+
+def require_verified(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not current_user.is_verified:
+        if settings.ENVIRONMENT == "development":
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before using this feature",
+        )
+    return current_user
+

@@ -65,6 +65,13 @@ export function useAuth() {
   const [user,   setUser]   = useState(authApi.getCachedUser);
   const [authed, setAuthed] = useState(() => !!localStorage.getItem("ep_token") && !!localStorage.getItem("ep_user"));
 
+  useEffect(() => {
+    if (authed) {
+      authApi.getMe()
+        .then(u => { setUser(u); localStorage.setItem("ep_user", JSON.stringify(u)); })
+        .catch(() => {});
+    }
+  }, [authed]);
   async function login(credentials) {
     const u = await authApi.login(credentials);
     setUser(u);
@@ -79,6 +86,11 @@ export function useAuth() {
     return u;
   }
 
+  async function loginWithGoogle(user) {
+    setUser(user);
+    setAuthed(true);
+  }
+
   function logout() {
     authApi.logout();
     setUser(null);
@@ -90,5 +102,5 @@ export function useAuth() {
     localStorage.setItem("ep_user", JSON.stringify(u));
   }
 
-  return { user, authed, login, register, logout, updateUser };
+  return { user, authed, login, register, loginWithGoogle, logout, updateUser };
 }

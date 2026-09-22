@@ -32,7 +32,8 @@ export const formsApi = {
     return http.get(`/forms/institutions?${p}`);
   },
 
-  buyForm:    ({ form_id, phone, email }) => http.post("/forms/buy", { form_id, phone, email }),
+  buyForm:    ({ form_id, phone, email, whatsapp_number, full_name, state_of_origin } = {}) =>
+                http.post("/forms/buy", { form_id, phone, email, whatsapp_number, full_name, state_of_origin }),
   getMyOrders: () => http.get("/forms/my-orders"),
 };
 

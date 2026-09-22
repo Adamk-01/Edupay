@@ -36,7 +36,7 @@ function getMockResponse(endpoint, method, body) {
     return {
       transactions: [
         { id: "tx_101", title: "WAEC e-PIN Purchase", amount: 3500, type: "debit", status: "completed", date: "2026-08-18" },
-        { id: "tx_102", title: "Wallet Top-up (Paystack)", amount: 15000, type: "credit", status: "completed", date: "2026-08-17" },
+        { id: "tx_102", title: "Wallet Top-up (Monnify)", amount: 15000, type: "credit", status: "completed", date: "2026-08-17" },
         { id: "tx_103", title: "MTN 10GB Data Bundle", amount: 3000, type: "debit", status: "completed", date: "2026-08-15" },
         { id: "tx_104", title: "Post-UTME Form (UNILAG)", amount: 5000, type: "debit", status: "completed", date: "2026-08-10" }
       ]
@@ -115,12 +115,17 @@ async function apiFetch(endpoint, opts = {}) {
         token.set(d.access_token, d.refresh_token || rt);
         headers.Authorization = `Bearer ${d.access_token}`;
         res = await fetch(`${BASE}${endpoint}`, { ...opts, headers });
-      } else {
+      } else if (rr && rr.status !== 429) {
+        // only clear token on real auth failure, not rate limit
         token.clear();
         window.location.reload();
         return;
       }
     }
+  }
+
+  if (res.status === 429) {
+    throw new Error("Too many requests. Please slow down and try again.");
   }
 
   if (!res.ok) {

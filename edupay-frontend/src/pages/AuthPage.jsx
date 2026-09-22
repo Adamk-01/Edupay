@@ -6,12 +6,13 @@ import { FileText, Building2, Wallet, GraduationCap } from "lucide-react";
 import { authApi } from "../api/auth";
 
 export default function AuthPage({ onLogin, onRegister }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [form,    setForm]    = useState({ name: "", email: "", phone: "", password: "" });
-  const [showPw,  setShowPw]  = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors,  setErrors]  = useState({});
-  const [apiErr,  setApiErr]  = useState("");
+  const [isLogin,  setIsLogin]  = useState(true);
+  const [form,     setForm]     = useState({ name: "", email: "", phone: "", password: "" });
+  const [showPw,   setShowPw]   = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [gLoading, setGLoading] = useState(false);
+  const [errors,   setErrors]   = useState({});
+  const [apiErr,   setApiErr]   = useState("");
 
   function validate() {
     const e = {};
@@ -41,6 +42,17 @@ export default function AuthPage({ onLogin, onRegister }) {
     } catch (e) {
       setApiErr(e.message || "Something went wrong. Please try again.");
     } finally { setLoading(false); }
+  }
+
+  async function handleGoogle() {
+    setGLoading(true);
+    setApiErr("");
+    try {
+      await authApi.googleRedirect();
+    } catch (e) {
+      setApiErr(e.message || "Google sign-in unavailable.");
+      setGLoading(false);
+    }
   }
 
   const F = k => ({
@@ -159,7 +171,11 @@ export default function AuthPage({ onLogin, onRegister }) {
           </button>
 
           <div className="auth-divider"><span>or</span></div>
-          <button className="btn btn-ghost btn-full"><Globe size={15}/>Continue with Google</button>
+          <button className="btn btn-ghost btn-full" onClick={handleGoogle} disabled={gLoading}>
+            {gLoading
+              ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }}/>Redirecting…</>
+              : <><Globe size={15}/>Continue with Google</>}
+          </button>
 
           <div className="auth-switch">
             {isLogin

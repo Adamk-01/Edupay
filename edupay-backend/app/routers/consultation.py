@@ -1,7 +1,7 @@
 import uuid
 import enum
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import Column, String, Numeric, Boolean, DateTime, ForeignKey, Enum, Text
@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.core.database import Base, get_db
 from app.models.user   import User
 from app.models.wallet import Wallet, Transaction, TransactionType, TransactionStatus
-from app.dependencies  import get_current_user, get_current_admin
+from app.dependencies  import get_current_user, get_current_admin, require_verified
 from app.services.email_service import send_email
 
 router = APIRouter(prefix="/consultations", tags=["Consultation"])
@@ -49,7 +49,7 @@ class Consultant(Base):
     email             = Column(String,  nullable=True)
     pdf_url           = Column(String,  nullable=True)
     pdf_filename      = Column(String,  nullable=True)
-    created_at        = Column(DateTime, default=datetime.utcnow)
+    created_at        = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class ConsultationSession(Base):
@@ -65,7 +65,7 @@ class ConsultationSession(Base):
     status         = Column(Enum(SessionStatus), default=SessionStatus.pending)
     reference      = Column(String, unique=True, nullable=False)
     meet_link      = Column(String, nullable=True)
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    created_at     = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ── Schemas ───────────────────────────────────────────────────
@@ -136,7 +136,7 @@ async def get_availability(consultant_id: str, date: str = Query(...)):
 async def book_session(
     data: BookSessionRequest,
     background_tasks: BackgroundTasks,
-    current_user: User    = Depends(get_current_user),
+    current_user: User    = Depends(require_verified),
     db:           Session = Depends(get_db),
 ):
     consultant = db.query(Consultant).filter(

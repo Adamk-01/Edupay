@@ -1,51 +1,32 @@
 import uuid
-import enum
+import logging
 from decimal import Decimal
-from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, Enum
-from sqlalchemy.dialects.postgresql import UUID
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
-from app.core.database import Base, get_db
-from app.models.user   import User
+from app.core.database import get_db
+from app.models.user import User
 from app.models.wallet import Wallet, Transaction, TransactionType, TransactionStatus
-from app.dependencies  import get_current_user
+from app.models.bill_order import BillOrder, BillCategory, BillOrderStatus
+from app.dependencies import get_current_user, require_verified
 from app.services.vtu_service import VTUService
+from app.services.email_service import send_order_confirmation
 
 router = APIRouter(prefix="/bills", tags=["Bills & VTU"])
-vtu    = VTUService()
+logger = logging.getLogger(__name__)
 
+# Factory for VTUService (Task 14)
+_vtu_instance: Optional[VTUService] = None
 
-# ── Model ─────────────────────────────────────────────────────
-class BillCategory(str, enum.Enum):
-    airtime     = "airtime"
-    data        = "data"
-    electricity = "electricity"
-    cable       = "cable"
-
-
-class BillOrderStatus(str, enum.Enum):
-    pending = "pending"
-    success = "success"
-    failed  = "failed"
-
-
-class BillOrder(Base):
-    __tablename__ = "bill_orders"
-    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id      = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    category     = Column(Enum(BillCategory), nullable=False)
-    provider     = Column(String, nullable=False)
-    account_no   = Column(String, nullable=False)
-    amount       = Column(Numeric(10, 2), nullable=False)
-    extra        = Column(String, nullable=True)
-    reference    = Column(String, unique=True, nullable=False)
-    status       = Column(Enum(BillOrderStatus), default=BillOrderStatus.pending)
-    provider_ref = Column(String, nullable=True)
-    created_at   = Column(DateTime, default=datetime.utcnow)
+def get_vtu() -> VTUService:
+    global _vtu_instance
+    if _vtu_instance is None:
+        _vtu_instance = VTUService()
+    return _vtu_instance
 
 
 # ── Schemas ───────────────────────────────────────────────────
@@ -82,6 +63,12 @@ async def _deduct_and_record(
     category: BillCategory, provider: str,
     account_no: str, extra: str = None,
 ):
+    """Atomically deduct balance and commit transaction before calling external provider.
+    Prevents race condition and double-spending.
+    """
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
     wallet = db.query(Wallet).filter(
         Wallet.user_id == user.id
     ).with_for_update().first()
@@ -89,30 +76,53 @@ async def _deduct_and_record(
     if not wallet or wallet.balance < amount:
         raise HTTPException(status_code=400, detail="Insufficient wallet balance")
 
-    reference      = f"EDUPAY-BILL-{uuid.uuid4().hex[:12].upper()}"
+    reference = f"EDUPAY-BILL-{uuid.uuid4().hex[:12].upper()}"
     wallet.balance -= amount
 
     txn = Transaction(
-        user_id=user.id, amount=amount, type=TransactionType.debit,
-        status=TransactionStatus.pending, reference=reference,
-        description=f"{category.value} – {provider} – {account_no}",
+        user_id=user.id,
+        amount=amount,
+        type=TransactionType.debit,
+        status=TransactionStatus.pending,
+        reference=reference,
+        description=f"{category.value if hasattr(category, 'value') else category} – {provider} – {account_no}",
     )
     order = BillOrder(
-        user_id=user.id, category=category, provider=provider,
-        account_no=account_no, amount=amount, extra=extra,
+        user_id=user.id,
+        category=category,
+        provider=provider,
+        account_no=account_no,
+        amount=amount,
+        extra=extra,
         reference=reference,
     )
-    db.add(txn)
-    db.add(order)
-    db.flush()
+
+    try:
+        db.add(txn)
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        db.refresh(txn)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Transaction failed: Insufficient balance or invalid data")
+
     return order, txn, reference
 
 
 async def _finalize(
-    db: Session, order: BillOrder, txn: Transaction,
+    db: Session, order_id: uuid.UUID, txn_id: uuid.UUID,
     success: bool, provider_ref: str = None,
 ):
-    order.status       = BillOrderStatus.success if success else BillOrderStatus.failed
+    """Finalize order status and refund wallet if operation failed."""
+    order = db.query(BillOrder).filter(BillOrder.id == order_id).first()
+    txn = db.query(Transaction).filter(Transaction.id == txn_id).first()
+
+    if not order or not txn:
+        logger.error("Failed to finalize order %s / txn %s: record not found", order_id, txn_id)
+        return
+
+    order.status = BillOrderStatus.success if success else BillOrderStatus.failed
     order.provider_ref = provider_ref
     txn.status = TransactionStatus.success if success else TransactionStatus.failed
 
@@ -122,6 +132,15 @@ async def _finalize(
         ).with_for_update().first()
         if wallet:
             wallet.balance += order.amount
+            refund_txn = Transaction(
+                user_id=order.user_id,
+                amount=order.amount,
+                type=TransactionType.credit,
+                status=TransactionStatus.success,
+                reference=f"REFUND-{order.reference}",
+                description=f"Refund: Failed {order.category.value if hasattr(order.category, 'value') else order.category} purchase",
+            )
+            db.add(refund_txn)
 
     db.commit()
 
@@ -190,8 +209,9 @@ async def get_data_bundles(provider: str):
 @router.post("/airtime")
 async def buy_airtime(
     data: AirtimeRequest,
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db),
+    current_user: User = Depends(require_verified),
+    db: Session = Depends(get_db),
+    vtu: VTUService = Depends(get_vtu),
 ):
     if data.amount < 50 or data.amount > 50000:
         raise HTTPException(status_code=400, detail="Amount must be between ₦50 and ₦50,000")
@@ -202,18 +222,21 @@ async def buy_airtime(
     )
     try:
         result = await vtu.buy_airtime(data.provider, data.phone, float(data.amount), reference)
-        await _finalize(db, order, txn, success=True, provider_ref=result.get("ref"))
+        await _finalize(db, order.id, txn.id, success=True, provider_ref=result.get("ref"))
+        await run_in_threadpool(send_order_confirmation, current_user.email, current_user.full_name, reference, f"{data.provider} Airtime ₦{data.amount}")
         return {"success": True, "reference": reference, "message": f"₦{data.amount} airtime sent to {data.phone}"}
-    except Exception as e:
-        await _finalize(db, order, txn, success=False)
-        raise HTTPException(status_code=502, detail=f"Airtime purchase failed: {e}")
+    except Exception:
+        logger.exception("Airtime purchase failed: ref=%s", reference)
+        await _finalize(db, order.id, txn.id, success=False)
+        raise HTTPException(status_code=502, detail="Airtime purchase failed. Your wallet has been refunded.")
 
 
 @router.post("/data")
 async def buy_data(
     data: DataRequest,
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db),
+    current_user: User = Depends(require_verified),
+    db: Session = Depends(get_db),
+    vtu: VTUService = Depends(get_vtu),
 ):
     order, txn, reference = await _deduct_and_record(
         db, current_user, data.amount,
@@ -221,18 +244,21 @@ async def buy_data(
     )
     try:
         result = await vtu.buy_data(data.provider, data.phone, data.bundle_id, reference)
-        await _finalize(db, order, txn, success=True, provider_ref=result.get("ref"))
+        await _finalize(db, order.id, txn.id, success=True, provider_ref=result.get("ref"))
+        await run_in_threadpool(send_order_confirmation, current_user.email, current_user.full_name, reference, f"{data.provider} Data Bundle")
         return {"success": True, "reference": reference, "message": f"Data bundle activated on {data.phone}"}
-    except Exception as e:
-        await _finalize(db, order, txn, success=False)
-        raise HTTPException(status_code=502, detail=f"Data purchase failed: {e}")
+    except Exception:
+        logger.exception("Data purchase failed: ref=%s", reference)
+        await _finalize(db, order.id, txn.id, success=False)
+        raise HTTPException(status_code=502, detail="Data purchase failed. Your wallet has been refunded.")
 
 
 @router.post("/electricity")
 async def pay_electricity(
     data: ElectricityRequest,
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db),
+    current_user: User = Depends(require_verified),
+    db: Session = Depends(get_db),
+    vtu: VTUService = Depends(get_vtu),
 ):
     if data.amount < 500:
         raise HTTPException(status_code=400, detail="Minimum electricity payment is ₦500")
@@ -246,23 +272,26 @@ async def pay_electricity(
             data.provider, data.meter_number, float(data.amount), data.meter_type, reference
         )
         token = result.get("token", "")
-        await _finalize(db, order, txn, success=True, provider_ref=result.get("ref"))
+        await _finalize(db, order.id, txn.id, success=True, provider_ref=result.get("ref"))
+        await run_in_threadpool(send_order_confirmation, current_user.email, current_user.full_name, reference, f"{data.provider} Electricity")
         return {
             "success":   True,
             "reference": reference,
             "token":     token,
             "message":   f"Electricity token: {token}" if token else "Payment successful",
         }
-    except Exception as e:
-        await _finalize(db, order, txn, success=False)
-        raise HTTPException(status_code=502, detail=f"Electricity payment failed: {e}")
+    except Exception:
+        logger.exception("Electricity payment failed: ref=%s", reference)
+        await _finalize(db, order.id, txn.id, success=False)
+        raise HTTPException(status_code=502, detail="Electricity payment failed. Your wallet has been refunded.")
 
 
 @router.post("/cable")
 async def pay_cable(
     data: CableRequest,
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db),
+    current_user: User = Depends(require_verified),
+    db: Session = Depends(get_db),
+    vtu: VTUService = Depends(get_vtu),
 ):
     order, txn, reference = await _deduct_and_record(
         db, current_user, data.amount,
@@ -270,17 +299,19 @@ async def pay_cable(
     )
     try:
         result = await vtu.pay_cable(data.provider, data.smart_card, data.package_id, reference)
-        await _finalize(db, order, txn, success=True, provider_ref=result.get("ref"))
+        await _finalize(db, order.id, txn.id, success=True, provider_ref=result.get("ref"))
+        await run_in_threadpool(send_order_confirmation, current_user.email, current_user.full_name, reference, f"{data.provider} Cable Subscription")
         return {"success": True, "reference": reference, "message": f"{data.provider} subscription renewed"}
-    except Exception as e:
-        await _finalize(db, order, txn, success=False)
-        raise HTTPException(status_code=502, detail=f"Cable payment failed: {e}")
+    except Exception:
+        logger.exception("Cable payment failed: ref=%s", reference)
+        await _finalize(db, order.id, txn.id, success=False)
+        raise HTTPException(status_code=502, detail="Cable payment failed. Your wallet has been refunded.")
 
 
 @router.get("/history")
 async def bill_history(
     category:     Optional[str] = Query(None),
-    current_user: User    = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db:           Session = Depends(get_db),
 ):
     query = db.query(BillOrder).filter(BillOrder.user_id == current_user.id)
@@ -291,13 +322,13 @@ async def bill_history(
         "orders": [
             {
                 "id":         str(o.id),
-                "category":   o.category,
+                "category":   o.category.value if hasattr(o.category, "value") else o.category,
                 "provider":   o.provider,
                 "account_no": o.account_no,
                 "amount":     float(o.amount),
-                "status":     o.status,
+                "status":     o.status.value if hasattr(o.status, "value") else o.status,
                 "reference":  o.reference,
-                "created_at": o.created_at.isoformat(),
+                "created_at": o.created_at.isoformat() if o.created_at else None,
             }
             for o in orders
         ]

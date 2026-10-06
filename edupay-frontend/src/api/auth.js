@@ -33,6 +33,8 @@ export const authApi = {
   getMe:          ()     => http.get("/auth/me"),
   updateMe:       (data) => http.patch("/auth/me", data),
   changePassword: (data) => http.patch("/auth/change-password", data),
+  requestPasswordReset: (email) => http.post("/auth/password-reset/request", { email }),
+  resetPassword: ({ email, otp, new_password }) => http.post("/auth/password-reset/confirm", { email, otp, new_password }),
   sendVerifyEmail:    ()    => http.post("/auth/verify-email/send"),
   confirmVerifyEmail: (otp) => http.post(`/auth/verify-email/confirm?otp=${otp}`),
 

@@ -7,6 +7,7 @@ export const walletApi = {
   fundWallet: ({ amount, payment_method }) =>
     http.post("/wallet/fund", { amount, payment_method }),
 
+  // reference comes from Paystack callback: ?reference=xxx&trxref=xxx
   verifyFunding: (reference) =>
     http.get(`/payments/verify/${reference}`),
 

@@ -4,6 +4,7 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from slowapi import Limiter
@@ -14,10 +15,11 @@ from app.models.user       import User, UserRole
 from app.models.wallet     import Wallet, Transaction, TransactionType, TransactionStatus
 from app.models.exam_order import ExamOrder, OrderStatus
 from app.models.bill_order import BillOrder
+from app.models.arewa_service import ArewaServicePrice
 from app.routers.forms        import FormOrder
 from app.routers.consultation import Consultant, ConsultationSession, ConsultantStatus
 from app.routers.news         import NewsPost
-from app.dependencies         import get_current_admin
+from app.dependencies         import get_current_admin, resolve_user_uuid
 from app.services.email_service import send_form_completed_email
 from app.utils.crypto import decrypt
 
@@ -51,6 +53,10 @@ class UpdateConsultantRequest(BaseModel):
     rating: Optional[str] = None
     status: Optional[ConsultantStatus] = None
     email: Optional[str] = None
+
+
+class ArewaServicePriceRequest(BaseModel):
+    sell_price: Decimal = Field(ge=Decimal("0"), max_digits=12, decimal_places=2)
 
 
 # ── DASHBOARD STATS ──────────────────────────────────────────
@@ -173,7 +179,11 @@ async def suspend_user(
     db: Session = Depends(get_db),
     _=Depends(get_current_admin),
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    parsed_user_id = resolve_user_uuid(user_id)
+    if not parsed_user_id:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    user = db.query(User).filter(User.id == parsed_user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == UserRole.admin:
@@ -199,8 +209,12 @@ async def credit_wallet(
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
 
+    parsed_user_id = resolve_user_uuid(user_id)
+    if not parsed_user_id:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
     wallet = db.query(Wallet).filter(
-        Wallet.user_id == user_id
+        Wallet.user_id == parsed_user_id
     ).with_for_update().first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
@@ -208,7 +222,7 @@ async def credit_wallet(
     wallet.balance += Decimal(str(amount))
 
     txn = Transaction(
-        user_id=user_id,
+        user_id=parsed_user_id,
         amount=Decimal(str(amount)),
         type=TransactionType.credit,
         status=TransactionStatus.success,
@@ -507,3 +521,34 @@ async def delete_consultant(
     db.delete(c)
     db.commit()
     return {"message": "Deleted"}
+
+
+@router.put("/arewa-service-prices/{category}/{service_slug}")
+async def update_arewa_service_price(
+    category: str,
+    service_slug: str,
+    payload: ArewaServicePriceRequest,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    if len(category) > 100 or len(service_slug) > 150:
+        raise HTTPException(status_code=400, detail="Invalid Arewa service identifier")
+
+    price = db.query(ArewaServicePrice).filter_by(
+        category=category,
+        service_slug=service_slug,
+    ).first()
+    if price:
+        price.sell_price = payload.sell_price
+    else:
+        db.add(ArewaServicePrice(
+            category=category,
+            service_slug=service_slug,
+            sell_price=payload.sell_price,
+        ))
+    db.commit()
+    return {
+        "category": category,
+        "service_slug": service_slug,
+        "sell_price": float(payload.sell_price),
+    }

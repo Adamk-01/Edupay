@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -6,6 +8,17 @@ from app.core.security import decode_token
 from app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def resolve_user_uuid(value) -> uuid.UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 def get_current_user(
@@ -21,7 +34,7 @@ def get_current_user(
     if not payload or payload.get("type") != "access":
         raise credentials_exception
 
-    user_id: str = payload.get("sub")
+    user_id = resolve_user_uuid(payload.get("sub"))
     if not user_id:
         raise credentials_exception
 

@@ -2,8 +2,8 @@ import uuid
 import enum
 from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import Column, Numeric, DateTime, ForeignKey, String, Enum, CheckConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Numeric, DateTime, ForeignKey, String, Enum, CheckConstraint, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -37,13 +37,14 @@ class Wallet(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    amount      = Column(Numeric(12, 2), nullable=False)
-    type        = Column(Enum(TransactionType), nullable=False)
-    status      = Column(Enum(TransactionStatus), default=TransactionStatus.pending)
-    reference   = Column(String, unique=True, nullable=False)
-    description = Column(String, nullable=True)
-    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    amount           = Column(Numeric(12, 2), nullable=False)
+    type             = Column(Enum(TransactionType), nullable=False)
+    status           = Column(Enum(TransactionStatus), default=TransactionStatus.pending)
+    reference        = Column(String, unique=True, nullable=False)
+    description      = Column(String, nullable=True)
+    provider_data    = Column(JSONB, nullable=True)  # stores Arewa Gate / provider response
+    created_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="transactions")

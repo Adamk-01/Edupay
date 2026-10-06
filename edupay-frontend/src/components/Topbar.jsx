@@ -39,13 +39,13 @@ export default function Topbar({ page, user, onToggleMenu }) {
 
   return (
     <div className="topbar">
-      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-        <button 
-          className="mobile-menu-btn" 
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <button
+          className="mobile-menu-btn icon-btn"
           onClick={onToggleMenu}
-          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text)" }}
+          aria-label="Open menu"
         >
-          <Menu size={24}/>
+          <Menu size={20}/>
         </button>
         <div>
           <div className="topbar-title">{found?.label || "EduPay"}</div>

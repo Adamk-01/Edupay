@@ -1,7 +1,12 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 import base64
 import logging
+import os
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
 # Ensure .env is loaded into the environment for pydantic BaseSettings
 try:
     from dotenv import load_dotenv
@@ -10,7 +15,6 @@ except Exception:
     # dotenv is optional; if it's not installed, pydantic will still read env vars
     # Fallback: manually parse .env into os.environ so Settings can read them
     try:
-        import os
         from pathlib import Path
         p = Path('.env')
         if p.exists():
@@ -26,26 +30,6 @@ except Exception:
     except Exception:
         pass
 
-# Debug: show whether MONNIFY keys are present in environment (masked)
-try:
-    import os
-    pub = os.environ.get("MONNIFY_PUBLIC_KEY", "")
-    sec = os.environ.get("MONNIFY_SECRET_KEY", "")
-    def _mask(s):
-        if not s: return "(empty)"
-        return s[:4] + "..." + s[-2:]
-    logger.debug("ENV MONNIFY_PUBLIC_KEY=%s MONNIFY_SECRET_KEY=%s", _mask(pub), _mask(sec))
-    # Also print for quick python -c checks
-    try:
-        print(f"[config] MONNIFY_PUBLIC_KEY={_mask(pub)}")
-        print(f"[config] MONNIFY_SECRET_KEY={_mask(sec)}")
-    except Exception:
-        pass
-except Exception:
-    pass
-
-logger = logging.getLogger(__name__)
-
 WEAK_SECRETS = {
     "", "supersecret", "your-super-secret-key-change-this-in-production",
     "base64encodedkey", "your_base64_key", "your_jwt_secret",
@@ -57,21 +41,29 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./edupay.db"
 
     # JWT
-    SECRET_KEY: str
+    SECRET_KEY: str = "dev-secret-key-change-me"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Monnify
-    MONNIFY_API_KEY: str = ""
-    MONNIFY_PUBLIC_KEY: str = ""
-    MONNIFY_SECRET_KEY: str = ""
-    MONNIFY_BASE_URL: str = "https://sandbox.monnify.com"
-    MONNIFY_CONTRACT_CODE: str = ""
-    MONNIFY_WALLET_ACCOUNT_NUMBER: str = ""
+    # Paystack
+    PAYSTACK_SECRET_KEY: str = ""
+    PAYSTACK_PUBLIC_KEY: str = ""
+
+    # Arewa Gate
+    AREWA_GATE_BASE_URL: str = "https://api.arewagate.com/api/v1"
+    AREWA_GATE_PUBLIC_KEY: str = ""
+    AREWA_GATE_SECRET_KEY: str = ""
+    AREWA_GATE_WEBHOOK_SECRET: str = ""
+    AREWA_GATE_JAMB_SERVICE_CATEGORY: str = "jamb-service"
+    AREWA_GATE_JAMB_SERVICE_NAME: str = "utme-only"
+    AREWA_GATE_WAEC_SERVICE_CATEGORY: str = "waec-service"
+    AREWA_GATE_WAEC_SERVICE_NAME: str = "result-pin"
+    AREWA_GATE_NECO_SERVICE_CATEGORY: str = "neco-service"
+    AREWA_GATE_NECO_SERVICE_NAME: str = "result-pin"
 
     # VTU
     VTU_API_KEY: str = ""
@@ -98,8 +90,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     ADMIN_URL: str = "http://localhost:5174"
     ENVIRONMENT: str = "development"
-    ENCRYPTION_KEY: str = ""
-    JWT_SECRET: str = ""
+    ENCRYPTION_KEY: str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    JWT_SECRET: str = "dev-jwt-secret-change-me"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
@@ -114,7 +106,7 @@ class Settings(BaseSettings):
     def validate_for_production(self):
         """Raise on startup if critical secrets are missing or weak in production."""
         if not self.is_production:
-            # Dev: just warn about ENCRYPTION_KEY since it will crash at runtime
+            # Dev mode should still boot reliably without a custom .env file.
             if self.ENCRYPTION_KEY in WEAK_SECRETS:
                 logger.warning(
                     "ENCRYPTION_KEY is not set — user name/phone encryption will fail. "
@@ -127,7 +119,6 @@ class Settings(BaseSettings):
             errors.append("SECRET_KEY is weak or default")
         if self.ENCRYPTION_KEY in WEAK_SECRETS:
             errors.append("ENCRYPTION_KEY is not set")
-        # Monnify keys are optional in production check (configure as needed)
         if not self.SMTP_USER or not self.SMTP_PASSWORD:
             errors.append("SMTP_USER and SMTP_PASSWORD must be set")
         if not self.GOOGLE_CLIENT_ID or self.GOOGLE_CLIENT_ID == "your_google_client_id":

@@ -129,10 +129,22 @@ async function apiFetch(endpoint, opts = {}) {
   }
 
   if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e.detail || `HTTP ${res.status}`);
+    const text = await res.text().catch(() => "");
+    let message = `HTTP ${res.status}`;
+    try {
+      const parsed = text ? JSON.parse(text) : {};
+      message = parsed.detail || message;
+    } catch {
+      if (text) message = text;
+    }
+    throw new Error(message);
   }
-  return res.json();
+
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return res.json();
+  }
+  return {};
 }
 
 export const http = {

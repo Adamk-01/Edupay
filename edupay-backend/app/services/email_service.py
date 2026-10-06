@@ -261,6 +261,41 @@ def send_admin_form_notification(buyer_name: str, buyer_email: str, buyer_phone:
     return _send_smtp(admin_email, f"[EduPay] New Form Order — {order_ref} — Action Required", _brand_wrap(content))
 
 
+def send_arewa_delivery_email(email: str, name: str, service_name: str, order_ref: str,
+                               amount: float, provider_data: dict):
+    """Email sent to user after successful Arewa Gate service delivery with full result."""
+    rows_html = "".join(
+        f'<tr style="border-bottom:1px solid #E2E8F0;">'
+        f'<td style="padding:10px 16px;color:#64748B;font-size:13px;text-transform:capitalize;">{k.replace("_", " ")}</td>'
+        f'<td style="padding:10px 16px;font-weight:700;font-size:14px;font-family:monospace;">{v}</td></tr>'
+        for k, v in provider_data.items() if v and not isinstance(v, (dict, list))
+    )
+    content = f"""
+      <h2 style="margin:0 0 6px;color:#059669;font-size:22px;">&#9989; Service Delivered!</h2>
+      <p style="color:#475569;margin:0 0 20px;">Hi <strong>{name}</strong>, your purchase of <strong>{service_name}</strong> was successful. Your details are below — save them!</p>
+      <table style="width:100%;border-collapse:collapse;background:#F8FAFC;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+        <tr style="border-bottom:1px solid #E2E8F0;background:#EBF2FF;">
+          <td style="padding:10px 16px;color:#1A56DB;font-size:13px;font-weight:700;">Service</td>
+          <td style="padding:10px 16px;font-weight:700;font-size:14px;color:#1A56DB;">{service_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E2E8F0;">
+          <td style="padding:10px 16px;color:#64748B;font-size:13px;">Amount Paid</td>
+          <td style="padding:10px 16px;font-weight:700;color:#DC2626;font-size:15px;">&#8358;{amount:,.2f}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E2E8F0;">
+          <td style="padding:10px 16px;color:#64748B;font-size:13px;">Reference</td>
+          <td style="padding:10px 16px;font-family:monospace;font-size:13px;">{order_ref}</td>
+        </tr>
+        {rows_html}
+      </table>
+      <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:14px 16px;border-radius:6px;margin-bottom:20px;color:#92400E;font-size:14px;">
+        &#128276; Keep this email safe. You can always view your order history on EduPay.ng.
+      </div>
+      <a href="{settings.FRONTEND_URL}/history" style="background:#1A56DB;color:#fff;padding:12px 28px;border-radius:8px;
+        text-decoration:none;display:inline-block;font-weight:700;margin-top:4px;">View Order History</a>"""
+    _send_smtp(email, f"EduPay — {service_name} Delivered: {order_ref}", _brand_wrap(content))
+
+
 def send_form_completed_email(email: str, name: str, form_name: str, order_ref: str):
     content = f"""
       <h2 style="margin:0 0 6px;color:#059669;font-size:22px;">&#9989; Your Form Order is Ready!</h2>

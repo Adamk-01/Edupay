@@ -62,8 +62,23 @@ import { authApi } from "../api/auth";
 import { token } from "../api/client";
 
 export function useAuth() {
-  const [user,   setUser]   = useState(authApi.getCachedUser);
-  const [authed, setAuthed] = useState(() => !!localStorage.getItem("ep_token") && !!localStorage.getItem("ep_user"));
+  const [user, setUser] = useState(() => {
+    try {
+      const current = authApi.getCachedUser();
+      return current || null;
+    } catch {
+      return null;
+    }
+  });
+  const [authed, setAuthed] = useState(() => {
+    try {
+      const tokenExists = !!localStorage.getItem("ep_token");
+      const userExists = !!authApi.getCachedUser();
+      return tokenExists && userExists;
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     if (authed) {

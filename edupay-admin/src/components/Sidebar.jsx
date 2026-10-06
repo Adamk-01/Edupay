@@ -1,14 +1,15 @@
 // src/components/Sidebar.jsx
 import { LayoutDashboard, Users, FileText, Building2,
-         Newspaper, GraduationCap, LogOut, Settings, Globe } from "lucide-react";
+         Newspaper, GraduationCap, LogOut, Settings, Globe, Tags } from "lucide-react";
 
 export const NAV = [
-  { id: "dashboard",   Icon: LayoutDashboard, label: "Dashboard",       group: "main"       },
-  { id: "users",       Icon: Users,           label: "Users & Wallets", group: "main"       },
-  { id: "exams",       Icon: FileText,        label: "Exam Orders",     group: "operations" },
-  { id: "forms",       Icon: Building2,       label: "School Forms",    group: "operations" },
-  { id: "news",        Icon: Newspaper,       label: "News CMS",        group: "content"    },
-  { id: "consultants", Icon: GraduationCap,   label: "Consultants",     group: "content"    },
+  { id: "dashboard",    Icon: LayoutDashboard, label: "Dashboard",       group: "main"       },
+  { id: "users",        Icon: Users,           label: "Users & Wallets", group: "main"       },
+  { id: "exams",        Icon: FileText,        label: "Exam Orders",     group: "operations" },
+  { id: "arewa-prices", Icon: Tags,            label: "Arewa Prices",    group: "operations" },
+  { id: "forms",        Icon: Building2,       label: "School Forms",    group: "operations" },
+  { id: "news",         Icon: Newspaper,       label: "News CMS",        group: "content"    },
+  { id: "consultants",  Icon: GraduationCap,   label: "Consultants",     group: "content"    },
 ];
 
 const GROUPS = [

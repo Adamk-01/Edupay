@@ -20,7 +20,7 @@ from app.schemas.auth  import (
     RegisterRequest, LoginRequest, TokenResponse,
     UserOut, RefreshRequest, ChangePasswordRequest, UpdateProfileRequest,
 )
-from app.dependencies        import get_current_user
+from app.dependencies        import get_current_user, resolve_user_uuid
 from app.services.email_service import send_verification_email, _send_smtp
 from app.utils.crypto import decrypt
 
@@ -111,6 +111,80 @@ async def confirm_verify_otp(
     return {"message": "Email verified successfully", "user": _user_to_out(current_user)}
 
 
+@router.post("/password-reset/request")
+@limiter.limit("10/minute")
+async def request_password_reset(
+    request: Request,
+    data: dict,
+    db: Session = Depends(get_db),
+):
+    email = str(data.get("email", "")).strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return {"message": "If an account exists for this email, a reset code has been sent."}
+
+    raw_otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    user.verification_otp = _hash_otp(raw_otp)
+    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    db.commit()
+
+    _send_smtp(
+        user.email,
+        "Reset your EduPay password",
+        f"<div style='font-family:sans-serif;max-width:520px;margin:0 auto'>"
+        f"<h2 style='color:#1A56DB'>Reset Your Password</h2>"
+        f"<p>Hi {user.full_name}, use the code below to reset your password. It expires in 10 minutes.</p>"
+        f"<div style='font-size:36px;font-weight:800;letter-spacing:.15em;color:#1A56DB;margin:24px 0'>{raw_otp}</div>"
+        f"<p style='color:#64748B;font-size:13px'>If you did not request this, you can safely ignore this email.</p></div>",
+    )
+    return {"message": "If an account exists for this email, a reset code has been sent."}
+
+
+@router.post("/password-reset/confirm")
+@limiter.limit("10/minute")
+async def confirm_password_reset(
+    request: Request,
+    data: dict,
+    db: Session = Depends(get_db),
+):
+    email = str(data.get("email", "")).strip().lower()
+    otp = str(data.get("otp", "")).strip()
+    new_password = str(data.get("new_password", "")).strip()
+
+    if not email or not otp or not new_password:
+        raise HTTPException(status_code=400, detail="Email, OTP and new password are required")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    stored = user.verification_otp or ""
+    hashed = _hash_otp(otp)
+    is_valid_otp = hmac.compare_digest(stored, hashed) or hmac.compare_digest(stored, otp)
+
+    now = datetime.now(timezone.utc)
+    is_expired = False
+    if user.otp_expires_at:
+        exp = user.otp_expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        is_expired = now > exp
+
+    if not is_valid_otp or not user.otp_expires_at or is_expired:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+    user.hashed_password = hash_password(new_password)
+    user.verification_otp = None
+    user.otp_expires_at = None
+    db.commit()
+    return {"message": "Password reset successfully"}
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 @limiter.limit("20/minute")
 async def register(
@@ -179,7 +253,11 @@ async def refresh_token(request: Request, data: RefreshRequest, db: Session = De
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-    user = db.query(User).filter(User.id == payload["sub"]).first()
+    user_uuid = resolve_user_uuid(payload.get("sub"))
+    if not user_uuid:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    user = db.query(User).filter(User.id == user_uuid).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found")
 

@@ -14,9 +14,9 @@ export default function PaymentVerifyPage({ toast }) {
   const verifiedRef = useRef(false);
 
   const reference =
-    searchParams.get("ref") ||
-    searchParams.get("paymentReference") ||
-    searchParams.get("transactionReference");
+    searchParams.get("reference") ||
+    searchParams.get("trxref") ||
+    searchParams.get("ref");
 
   useEffect(() => {
     if (!reference) {

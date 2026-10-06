@@ -14,44 +14,26 @@ from app.core.config   import settings
 from app.models.user   import User, UserRole
 from app.models.wallet import Wallet, Transaction, TransactionStatus
 from app.services.email_service import send_wallet_funded_email
-from app.services.monnify_service import MonnifyService
+from app.services.paystack_service import PaystackService
 from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/payments", tags=["Payments"])
+router  = APIRouter(prefix="/payments", tags=["Payments"])
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _verify_monnify_signature(body: bytes, signature_header: str) -> bool:
-    """Verify Monnify webhook signature using HMAC-SHA512.
-
-    Monnify sends a hash of the request body in the 'monnify-signature'
-    header, computed with your secret key using HMAC-SHA512.
-    """
-    if not settings.MONNIFY_SECRET_KEY:
-        logger.error("MONNIFY_SECRET_KEY not set — cannot verify webhook signature")
-        return False
-
-    expected = hmac.new(
-        settings.MONNIFY_SECRET_KEY.encode("utf-8"),
-        body,
-        hashlib.sha512,
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, signature_header)
-
-
-@router.post("/webhook/monnify")
-async def monnify_webhook(
+@router.post("/webhook/paystack")
+async def paystack_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ):
     body = await request.body()
 
     # ── 1. Verify signature ──────────────────────────────────
-    signature = request.headers.get("monnify-signature", "")
-    if not signature or not _verify_monnify_signature(body, signature):
-        logger.warning("Monnify webhook rejected: invalid or missing signature")
+    signature = request.headers.get("x-paystack-signature", "")
+    paystack = PaystackService()
+    if not paystack.verify_webhook(body, signature):
+        logger.warning("Paystack webhook rejected: invalid signature")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     # ── 2. Parse payload ─────────────────────────────────────
@@ -60,28 +42,17 @@ async def monnify_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    logger.info("Monnify webhook received: %s", payload)
+    logger.info("Paystack webhook event: %s", payload.get("event"))
 
-    # Common Monnify payload shapes may nest data under 'responseBody' or 'data'
-    data = payload.get("responseBody") or payload.get("data") or payload
-
-    # Extract reference and status heuristically
-    reference = (
-        data.get("paymentReference")
-        or data.get("payment_reference")
-        or data.get("paymentRef")
-        or data.get("transactionReference")
-        or data.get("reference")
-    )
-    status = (data.get("paymentStatus") or data.get("status") or "").upper()
-
-    if not reference:
-        logger.warning("Monnify webhook missing reference: %s", data)
+    # Only handle successful charge events
+    if payload.get("event") not in ("charge.success",):
         return {"status": "ignored"}
 
-    # Consider common success indicators
-    if status not in ("PAID", "SUCCESS", "SUCCESSFUL", "COMPLETED"):
-        logger.info("Monnify webhook non-success status=%s ref=%s", status, reference)
+    data = payload.get("data", {})
+    reference = data.get("reference")
+    status    = (data.get("status") or "").lower()
+
+    if not reference or status != "success":
         return {"status": "ignored"}
 
     # ── 3. Find pending transaction ──────────────────────────
@@ -91,50 +62,32 @@ async def monnify_webhook(
     ).with_for_update().first()
 
     if not transaction:
-        # Already processed or unknown — idempotent response
-        logger.info("Monnify webhook: no pending txn for ref=%s (already processed?)", reference)
+        logger.info("Paystack webhook: no pending txn for ref=%s (already processed?)", reference)
         return {"status": "ignored"}
 
-    # ── 4. Validate amount matches ───────────────────────────
-    # Monnify may report amount in major units (Naira) or minor units (kobo).
-    # Accept the amount if it matches within either interpretation.
-    webhook_amount_raw = data.get("amountPaid") or data.get("amount") or data.get("settlementAmount")
-    if webhook_amount_raw is not None:
+    # ── 4. Validate amount (Paystack sends kobo) ─────────────
+    webhook_kobo = data.get("amount")
+    if webhook_kobo is not None:
         try:
-            webhook_amount = Decimal(str(webhook_amount_raw))
-            # Check both Naira-to-Naira and Kobo-to-Naira
-            expected_naira = transaction.amount
-            if webhook_amount != expected_naira and webhook_amount != expected_naira * 100:
-                logger.error(
-                    "Monnify webhook amount mismatch: webhook=%s expected=%s ref=%s",
-                    webhook_amount, expected_naira, reference,
-                )
-                # Do NOT credit — flag for manual review
+            paid_naira = Decimal(str(webhook_kobo)) / 100
+            if abs(paid_naira - transaction.amount) > Decimal("1"):  # 1 naira tolerance
+                logger.error("Paystack amount mismatch: paid=%s expected=%s ref=%s", paid_naira, transaction.amount, reference)
                 transaction.status = TransactionStatus.failed
-                transaction.description = (
-                    f"{transaction.description or ''} | "
-                    f"AMOUNT MISMATCH: webhook={webhook_amount} expected={expected_naira}"
-                )
+                transaction.description = f"{transaction.description} | AMOUNT MISMATCH: paid={paid_naira} expected={transaction.amount}"
                 db.commit()
                 return {"status": "amount_mismatch"}
-        except (ValueError, TypeError):
-            logger.warning("Monnify webhook: could not parse amount: %s", webhook_amount_raw)
-            # Proceed cautiously — log but don't block if amount field is missing/malformed
+        except Exception:
+            pass
 
     # ── 5. Credit wallet ─────────────────────────────────────
     transaction.status = TransactionStatus.success
-
-    wallet = db.query(Wallet).filter(
-        Wallet.user_id == transaction.user_id
-    ).with_for_update().first()
-
+    wallet = db.query(Wallet).filter(Wallet.user_id == transaction.user_id).with_for_update().first()
     if wallet:
         wallet.balance += transaction.amount
-
     db.commit()
-    logger.info("Wallet funded via Monnify: ref=%s amount=%s", reference, transaction.amount)
+    logger.info("Wallet funded via Paystack webhook: ref=%s amount=%s", reference, transaction.amount)
 
-    # ── 6. Send confirmation email (non-blocking) ────────────
+    # ── 6. Send confirmation email ───────────────────────────
     user = db.query(User).filter(User.id == transaction.user_id).first()
     if user and wallet:
         try:
@@ -159,69 +112,48 @@ async def verify_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Verify payment status for a reference, query Monnify if pending, and credit user wallet."""
+    """Called by frontend after Paystack redirects back. Verifies and credits wallet."""
     clean_ref = reference.strip()
 
-    # Find the pending or existing transaction
-    transaction = (
-        db.query(Transaction)
-        .filter(Transaction.reference == clean_ref)
-        .first()
-    )
-
+    transaction = db.query(Transaction).filter(Transaction.reference == clean_ref).first()
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    # Ensure transaction belongs to current user (unless admin)
     if transaction.user_id != current_user.id and getattr(current_user, "role", None) != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Unauthorized to verify this transaction")
+        raise HTTPException(status_code=403, detail="Unauthorized")
 
     wallet = db.query(Wallet).filter(Wallet.user_id == transaction.user_id).first()
 
-    # If transaction is already successfully credited
+    # Already credited (webhook may have fired first)
     if transaction.status == TransactionStatus.success:
         return {
-            "status": "success",
-            "message": "Payment verified and credited",
+            "status":    "success",
+            "message":   "Payment verified and wallet credited.",
             "reference": clean_ref,
-            "amount": float(transaction.amount),
-            "balance": float(wallet.balance) if wallet else 0.0,
+            "amount":    float(transaction.amount),
+            "balance":   float(wallet.balance) if wallet else 0.0,
         }
 
-    monnify = MonnifyService()
+    paystack = PaystackService()
 
-    if monnify.enabled:
+    if paystack.enabled:
         try:
-            m_data = await monnify.verify_transaction(clean_ref)
-            logger.info("Monnify verify response for %s: %s", clean_ref, m_data)
+            data = await paystack.verify_transaction(clean_ref)
+            ps_status = (data.get("status") or "").lower()
 
-            # Extract status heuristically from Monnify response
-            m_status = (
-                m_data.get("paymentStatus")
-                or m_data.get("status")
-                or ""
-            ).upper()
-
-            if m_status in ("PAID", "SUCCESS", "SUCCESSFUL", "COMPLETED", "OVERPAID"):
+            if ps_status == "success":
                 # Validate amount
-                raw_amt = m_data.get("amountPaid") or m_data.get("amount") or m_data.get("settlementAmount")
-                if raw_amt is not None:
+                kobo = data.get("amount")
+                if kobo is not None:
                     try:
-                        paid_amt = Decimal(str(raw_amt))
-                        if paid_amt != transaction.amount and paid_amt != transaction.amount * 100:
-                            logger.error("Verify amount mismatch: paid=%s expected=%s", paid_amt, transaction.amount)
+                        paid = Decimal(str(kobo)) / 100
+                        if abs(paid - transaction.amount) > Decimal("1"):
                             transaction.status = TransactionStatus.failed
-                            transaction.description = f"{transaction.description or ''} | Amount mismatch: paid {paid_amt}"
                             db.commit()
-                            return {
-                                "status": "failed",
-                                "message": "Payment amount does not match transaction amount",
-                                "reference": clean_ref,
-                            }
+                            return {"status": "failed", "message": "Payment amount mismatch.", "reference": clean_ref}
                     except Exception:
                         pass
 
-                # Credit wallet
                 transaction.status = TransactionStatus.success
                 wallet = db.query(Wallet).filter(Wallet.user_id == transaction.user_id).with_for_update().first()
                 if wallet:
@@ -230,7 +162,6 @@ async def verify_payment(
                 if wallet:
                     db.refresh(wallet)
 
-                # Send confirmation email
                 try:
                     user = db.query(User).filter(User.id == transaction.user_id).first()
                     if user and wallet:
@@ -244,62 +175,51 @@ async def verify_payment(
                     logger.exception("Failed to send wallet email for %s", clean_ref)
 
                 return {
-                    "status": "success",
-                    "message": f"Payment successful! ₦{float(transaction.amount):,.2f} added to your wallet.",
+                    "status":    "success",
+                    "message":   f"Payment successful! ₦{float(transaction.amount):,.2f} added to your wallet.",
                     "reference": clean_ref,
-                    "amount": float(transaction.amount),
-                    "balance": float(wallet.balance) if wallet else float(transaction.amount),
+                    "amount":    float(transaction.amount),
+                    "balance":   float(wallet.balance) if wallet else float(transaction.amount),
                 }
 
-            elif m_status in ("FAILED", "CANCELLED", "EXPIRED"):
+            elif ps_status in ("failed", "abandoned"):
                 transaction.status = TransactionStatus.failed
                 db.commit()
-                return {
-                    "status": "failed",
-                    "message": f"Payment was {m_status.lower()}",
-                    "reference": clean_ref,
-                }
+                return {"status": "failed", "message": f"Payment {ps_status}.", "reference": clean_ref}
+
             else:
-                return {
-                    "status": "pending",
-                    "message": "Payment is still being processed by Monnify",
-                    "reference": clean_ref,
-                }
+                return {"status": "pending", "message": "Payment is still being processed.", "reference": clean_ref}
+
         except Exception as e:
-            logger.warning("Monnify verification call failed for %s: %s", clean_ref, e)
+            logger.warning("Paystack verify call failed for %s: %s", clean_ref, e)
             if settings.ENVIRONMENT == "development":
-                # In development mode, permit simulated completion
-                logger.info("Dev fallback: completing funding for ref=%s", clean_ref)
                 transaction.status = TransactionStatus.success
                 wallet = db.query(Wallet).filter(Wallet.user_id == transaction.user_id).with_for_update().first()
                 if wallet:
                     wallet.balance += transaction.amount
                 db.commit()
                 return {
-                    "status": "success",
-                    "message": f"[Dev Mode] Payment verified! ₦{float(transaction.amount):,.2f} added to your wallet.",
+                    "status":    "success",
+                    "message":   f"[Dev Mode] ₦{float(transaction.amount):,.2f} added to your wallet.",
                     "reference": clean_ref,
-                    "amount": float(transaction.amount),
-                    "balance": float(wallet.balance) if wallet else float(transaction.amount),
+                    "amount":    float(transaction.amount),
+                    "balance":   float(wallet.balance) if wallet else float(transaction.amount),
                 }
-            raise HTTPException(status_code=502, detail=f"Monnify verification error: {str(e)}")
+            raise HTTPException(status_code=502, detail=f"Paystack verification error: {str(e)}")
 
     else:
-        # Monnify credentials not set
+        # No Paystack key — dev auto-credit
         if settings.ENVIRONMENT == "development":
-            logger.info("Dev mode (no Monnify keys): auto-crediting funding for ref=%s", clean_ref)
             transaction.status = TransactionStatus.success
             wallet = db.query(Wallet).filter(Wallet.user_id == transaction.user_id).with_for_update().first()
             if wallet:
                 wallet.balance += transaction.amount
             db.commit()
             return {
-                "status": "success",
-                "message": f"[Dev Mode] Payment simulated! ₦{float(transaction.amount):,.2f} added to your wallet.",
+                "status":    "success",
+                "message":   f"[Dev Mode] ₦{float(transaction.amount):,.2f} added to your wallet.",
                 "reference": clean_ref,
-                "amount": float(transaction.amount),
-                "balance": float(wallet.balance) if wallet else float(transaction.amount),
+                "amount":    float(transaction.amount),
+                "balance":   float(wallet.balance) if wallet else float(transaction.amount),
             }
-        else:
-            raise HTTPException(status_code=400, detail="Monnify is not configured on the server")
-
+        raise HTTPException(status_code=400, detail="Paystack is not configured.")

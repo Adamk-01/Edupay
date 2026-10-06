@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./styles/admin.css";
 import { adminToken } from "./api/client";
 import { useToast }   from "./hooks/index";
@@ -15,6 +15,7 @@ import SchoolFormsPage  from "./pages/SchoolFormsPage";
 import NewsCMSPage      from "./pages/NewsCMSPage";
 import ConsultantsPage  from "./pages/ConsultantsPage";
 import SettingsPage     from "./pages/SettingsPage";
+import ArewaPricesPage  from "./pages/ArewaPricesPage";
 
 export default function AdminApp() {
   const [admin,  setAdmin]  = useState(() => {
@@ -27,8 +28,22 @@ export default function AdminApp() {
   const [page,   setPage]   = useState("dashboard");
   const { toasts, toast }   = useToast();
 
-  function onLogin(u)  { setAdmin(u); setAuthed(true); }
+  function onLogin(u)  {
+    if (u?.role !== "admin") {
+      adminToken.clear();
+      setAdmin(null);
+      setAuthed(false);
+      return;
+    }
+    setAdmin(u); setAuthed(true);
+  }
   function onLogout()  { adminToken.clear(); setAdmin(null); setAuthed(false); setPage("dashboard"); }
+
+  useEffect(() => {
+    if (admin && admin.role !== "admin") {
+      onLogout();
+    }
+  }, [admin]);
 
   const PAGES = {
     dashboard:   <Dashboard/>,
@@ -38,6 +53,7 @@ export default function AdminApp() {
     news:        <NewsCMSPage     toast={toast}/>,
     consultants: <ConsultantsPage toast={toast}/>,
     settings:    <SettingsPage    toast={toast}/>,
+    "arewa-prices": <ArewaPricesPage toast={toast}/>,
   };
 
 

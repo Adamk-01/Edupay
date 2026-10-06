@@ -14,20 +14,15 @@ from app.schemas.wallet import (
     FundWalletRequest, FundWalletResponse,
     WalletOut, TransactionListResponse,
 )
-from app.dependencies        import get_current_user
-from app.services.monnify_service import MonnifyService
+from app.dependencies import get_current_user, require_verified
+from app.services.paystack_service import PaystackService
 from app.core.config import settings
-from app.dependencies import require_verified
 import logging
 
 logger = logging.getLogger(__name__)
 
-router   = APIRouter(prefix="/wallet", tags=["Wallet"])
+router  = APIRouter(prefix="/wallet", tags=["Wallet"])
 limiter = Limiter(key_func=get_remote_address)
-
-def _get_monnify():
-    return MonnifyService()
-
 
 
 @router.get("/", response_model=WalletOut)
@@ -60,36 +55,35 @@ async def initiate_funding(
         type=TransactionType.credit,
         status=TransactionStatus.pending,
         reference=reference,
-        description=f"Wallet funding via {data.payment_method}",
+        description=f"Wallet funding via Paystack",
     )
     db.add(transaction)
     db.commit()
 
-    logger.info("Initiate funding requested: user=%s amount=%s method=%s", current_user.id, data.amount, data.payment_method)
+    paystack = PaystackService()
 
-    # Monnify funding flow
-    monnify_client = _get_monnify()
-    if not monnify_client.enabled:
+    if not paystack.enabled:
         if settings.ENVIRONMENT == "development":
-            logger.info("Dev mode: Monnify not configured. Providing simulated redirect for ref=%s", reference)
+            logger.info("Dev mode: Paystack not configured. Simulating redirect for ref=%s", reference)
             return FundWalletResponse(
-                authorization_url=f"{settings.FRONTEND_URL}/payment/verify?ref={reference}&dev_mode=1",
+                authorization_url=f"{settings.FRONTEND_URL}/payment/verify?reference={reference}&trxref={reference}",
                 access_code="DEV_MOCK",
                 reference=reference,
             )
-        logger.warning("No Monnify provider configured (user=%s)", current_user.id)
-        raise HTTPException(status_code=400, detail="Monnify is not configured. Please add MONNIFY_API_KEY, MONNIFY_SECRET_KEY, and MONNIFY_CONTRACT_CODE to edupay-backend/.env and restart the backend.")
+        raise HTTPException(
+            status_code=400,
+            detail="Paystack is not configured. Add PAYSTACK_SECRET_KEY to .env and restart.",
+        )
 
-    logger.info("Using Monnify for funding: user=%s", current_user.id)
     try:
-        result = await monnify_client.initialize_payment(
+        result = await paystack.initialize_payment(
             email=current_user.email,
             amount=float(data.amount),
             reference=reference,
-            callback_url=f"{settings.FRONTEND_URL}/payment/verify?ref={reference}",
+            callback_url=f"{settings.FRONTEND_URL}/payment/verify?reference={reference}&trxref={reference}",
         )
     except Exception as e:
-        logger.exception("Monnify initialize failed for user %s: %s", current_user.id, e)
+        logger.exception("Paystack initialize failed for user %s", current_user.id)
         raise HTTPException(status_code=502, detail=str(e))
 
     return FundWalletResponse(

@@ -12,6 +12,7 @@ from app.core.database import Base
 from app.models.user       import User                   # noqa
 from app.models.wallet     import Wallet, Transaction    # noqa
 from app.models.exam_order import ExamOrder              # noqa
+from app.models.arewa_service import ArewaServicePrice   # noqa
 from app.routers.forms        import Institution, SchoolForm, FormOrder    # noqa
 from app.routers.bills        import BillOrder                             # noqa
 from app.routers.news         import NewsPost                              # noqa

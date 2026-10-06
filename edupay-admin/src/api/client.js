@@ -145,6 +145,7 @@ export const http = {
   get:    url      => adminFetch(url),
   post:   (url, b) => adminFetch(url, { method: "POST",   body: JSON.stringify(b) }),
   patch:  (url, b) => adminFetch(url, { method: "PATCH",  body: JSON.stringify(b) }),
+  put:    (url, b) => adminFetch(url, { method: "PUT",    body: JSON.stringify(b) }),
   delete: url      => adminFetch(url, { method: "DELETE" }),
 };
 

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-# Monnify gateway configured and active
+# Paystack gateway configured and active
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -12,7 +12,7 @@ from app.core.config   import settings
 from app.core.database import Base, engine, SessionLocal
 
 # ── Import all models so SQLAlchemy registers them ───────────
-from app.models import user, wallet, exam_order          # noqa
+from app.models import user, wallet, exam_order, arewa_service  # noqa
 from app.routers.forms        import Institution, SchoolForm, FormOrder    # noqa
 from app.routers.bills        import BillOrder                             # noqa
 from app.routers.news         import NewsPost                              # noqa
@@ -20,7 +20,7 @@ from app.routers.consultation import Consultant, ConsultationSession       # noq
 
 # ── Import routers ───────────────────────────────────────────
 from app.routers import (auth, wallet as wallet_router, exams, forms,
-    bills, news, consultation, payments, admin, uploads, google_auth,)
+    bills, news, consultation, payments, admin, uploads, google_auth, arewagate)
 # Development-only debug routes
 try:
     if not settings.is_production:
@@ -99,6 +99,7 @@ app.include_router(payments.router,          prefix=API)
 app.include_router(admin.router,             prefix=API)
 app.include_router(uploads.router,           prefix=API)
 app.include_router(google_auth.router, prefix=API)
+app.include_router(arewagate.router, prefix=API)
 if not settings.is_production and 'debug_email' in globals() and debug_email is not None:
     app.include_router(debug_email.router, prefix=API)
 if not settings.is_production and debug_router:

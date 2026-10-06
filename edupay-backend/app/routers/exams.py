@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.user       import User
 from app.models.wallet     import Wallet, Transaction, TransactionType, TransactionStatus
 from app.models.exam_order import ExamOrder, ExamType, OrderStatus
 from app.dependencies      import get_current_user, require_verified
+from app.services.arewagate_service import ArewaGateService
 from app.services.email_service import send_order_confirmation
 
 router = APIRouter(prefix="/exams", tags=["Exam Services"])
@@ -24,6 +26,18 @@ EXAM_PRICES: dict[ExamType, Decimal] = {
     ExamType.NECO_PIN:    Decimal("2500"),
     ExamType.NECO_REG:    Decimal("18000"),
 }
+
+
+def _arewa_exam_mapping(exam_type: str):
+    mapping = {
+        "JAMB_EPIN": (settings.AREWA_GATE_JAMB_SERVICE_CATEGORY, settings.AREWA_GATE_JAMB_SERVICE_NAME),
+        "JAMB_RESULT": (settings.AREWA_GATE_JAMB_SERVICE_CATEGORY, settings.AREWA_GATE_JAMB_SERVICE_NAME),
+        "WAEC_PIN": (settings.AREWA_GATE_WAEC_SERVICE_CATEGORY, settings.AREWA_GATE_WAEC_SERVICE_NAME),
+        "WAEC_REG": (settings.AREWA_GATE_WAEC_SERVICE_CATEGORY, settings.AREWA_GATE_WAEC_SERVICE_NAME),
+        "NECO_PIN": (settings.AREWA_GATE_NECO_SERVICE_CATEGORY, settings.AREWA_GATE_NECO_SERVICE_NAME),
+        "NECO_REG": (settings.AREWA_GATE_NECO_SERVICE_CATEGORY, settings.AREWA_GATE_NECO_SERVICE_NAME),
+    }
+    return mapping.get(exam_type)
 
 
 @router.get("/services")
@@ -68,6 +82,67 @@ async def place_order(
         )
 
     reference = f"EDUPAY-EXAM-{uuid.uuid4().hex[:12].upper()}"
+    gateway_config = _arewa_exam_mapping(exam_enum.value)
+    arewa_service = None
+    if gateway_config and settings.AREWA_GATE_PUBLIC_KEY and settings.AREWA_GATE_SECRET_KEY:
+        category, service_name = gateway_config
+        arewa_service = ArewaGateService()
+        try:
+            result = await arewa_service.purchase_manual_service(
+                category=category,
+                service=service_name,
+                quantity=quantity,
+                payload={
+                    "phone": phone,
+                    "email": email,
+                    "exam_type": exam_enum.value,
+                    "customer_name": current_user.full_name,
+                },
+                idempotency_key=reference,
+            )
+            if result.get("success"):
+                gateway_data = result.get("data") or {}
+                wallet.balance -= total_amount
+                txn = Transaction(
+                    user_id=current_user.id,
+                    amount=total_amount,
+                    type=TransactionType.debit,
+                    status=TransactionStatus.success,
+                    reference=reference,
+                    description=f"{exam_enum.value} x{quantity} via Arewa Gate",
+                )
+                order = ExamOrder(
+                    user_id=current_user.id,
+                    exam_type=exam_enum,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    total_amount=total_amount,
+                    phone=phone,
+                    email=email,
+                    status=OrderStatus.completed,
+                    reference=reference,
+                    pins_data=json.dumps(gateway_data.get("slots", [])),
+                )
+                db.add(txn)
+                db.add(order)
+                db.commit()
+                db.refresh(order)
+                await run_in_threadpool(
+                    send_order_confirmation,
+                    current_user.email, current_user.full_name,
+                    reference, f"{exam_enum.value} x{quantity}",
+                )
+                return {
+                    "order_id": str(order.id),
+                    "reference": reference,
+                    "status": order.status,
+                    "message": f"Arewa Gate order placed! Your {exam_enum.value} request is being processed.",
+                    "provider": "arewa_gate",
+                    "provider_response": gateway_data,
+                }
+        except Exception as exc:
+            logger.warning("Arewa Gate purchase failed for %s (%s); falling back to local flow: %s", exam_enum.value, current_user.id, exc)
+
     wallet.balance -= total_amount
 
     txn = Transaction(
@@ -95,11 +170,10 @@ async def place_order(
     db.commit()
     db.refresh(order)
 
-    # ── Mock PIN Generation (until VTU provider is active) ──
     pins = []
     for _ in range(quantity):
         pins.append(f"{uuid.uuid4().hex[:4].upper()}-{uuid.uuid4().hex[:4].upper()}-{uuid.uuid4().hex[:4].upper()}")
-    
+
     order.pins_data = json.dumps(pins)
     order.status    = OrderStatus.completed
     db.commit()

@@ -1,8 +1,10 @@
 // src/pages/GoogleCallback.jsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Globe, AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { authApi } from "../api/auth";
+import EduPayMark from "../components/EduPayMark";
+import { BrandLoader } from "../components/shared";
 
 export default function GoogleCallback({ onSuccess }) {
   const navigate   = useNavigate();
@@ -32,7 +34,7 @@ export default function GoogleCallback({ onSuccess }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
       <div style={{ textAlign: "center", maxWidth: 360 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 24 }}>
-          <Globe size={22} color="var(--blue)" />
+          <div className="logo-mark"><EduPayMark/></div>
           <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>EduPay.ng</span>
         </div>
 
@@ -46,10 +48,7 @@ export default function GoogleCallback({ onSuccess }) {
             </button>
           </>
         ) : (
-          <>
-            <RefreshCw size={22} color="var(--blue)" style={{ animation: "spin 1s linear infinite", marginBottom: 12 }} />
-            <p style={{ fontSize: 14, color: "var(--muted)" }}>Signing you in with Google…</p>
-          </>
+          <BrandLoader label="Signing you in with Google…"/>
         )}
       </div>
     </div>

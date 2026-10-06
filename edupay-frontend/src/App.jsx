@@ -6,6 +6,7 @@ import { useAuth, useToast } from "./hooks/index";
 import { authApi } from "./api/auth";
 import Sidebar  from "./components/Sidebar";
 import Topbar   from "./components/Topbar";
+import EduPayMark from "./components/EduPayMark";
 import { Toast } from "./components/shared";
 
 import AuthPage           from "./pages/AuthPage";
@@ -54,12 +55,12 @@ function VerificationGate({ user, onVerified, onLogout }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: 18, boxShadow: "0 20px 40px rgba(15,23,42,0.08)", border: "1px solid var(--border)", padding: 30 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <div className="logo-mark"><span style={{ fontSize: 18 }}>E</span></div>
+          <div className="logo-mark"><EduPayMark/></div>
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>EduPay<span style={{ color: "var(--blue)" }}>.ng</span></div>
         </div>
         <h2 style={{ margin: "0 0 8px", fontSize: 24, fontWeight: 800 }}>Verify your email</h2>
         <p style={{ margin: "0 0 18px", color: "var(--muted)", lineHeight: 1.6 }}>
-          We sent a verification code to <strong>{user?.email || "your email"}</strong>. Complete it to unlock wallet funding, form purchases, and account access.
+          Verify <strong>{user?.email || "your email"}</strong> to unlock wallet funding and purchases. If you do not have a current code, choose Resend to email a new one.
         </p>
         <div style={{ background: "#FFF5F5", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 12px", marginBottom: 18, color: "#7F1D1D", fontSize: 13 }}>
           {message}

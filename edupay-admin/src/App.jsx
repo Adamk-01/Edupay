@@ -26,6 +26,7 @@ export default function AdminApp() {
     () => !!localStorage.getItem("ep_admin_token") && !!localStorage.getItem("ep_admin_user")
   );
   const [page,   setPage]   = useState("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toasts, toast }   = useToast();
 
   function onLogin(u)  {
@@ -66,9 +67,15 @@ export default function AdminApp() {
 
   return (
     <div className="admin-wrap">
-      <AdminSidebar page={page} setPage={setPage} onLogout={onLogout}/>
+      <AdminSidebar
+        page={page}
+        setPage={setPage}
+        onLogout={onLogout}
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
       <div className="main">
-        <AdminTopbar page={page} setPage={setPage} admin={admin}/>
+        <AdminTopbar page={page} setPage={setPage} admin={admin} onToggleMenu={() => setMobileMenuOpen(true)}/>
         {PAGES[page] || <Dashboard/>}
       </div>
       <Toast toasts={toasts}/>

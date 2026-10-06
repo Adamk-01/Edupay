@@ -1,7 +1,8 @@
 // src/components/shared.jsx
 import { CheckCircle, XCircle, AlertCircle, Info,
          FileText, Wallet, Smartphone, Wifi, Lightbulb,
-         Tv, Building2, GraduationCap, Activity } from "lucide-react";
+         Tv, Building2, GraduationCap, Activity, RefreshCw } from "lucide-react";
+import EduPayMark from "./EduPayMark";
 
 // ── Format helpers ────────────────────────────────────────────
 export const fmt     = n => Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
@@ -71,9 +72,17 @@ export function Skeleton({ h = 18, w = "100%", mb = 8 }) {
   return <div className="skeleton" style={{ height: h, width: w, marginBottom: mb }}/>;
 }
 
+export function BrandLoader({ label }) {
+  return (
+    <div className="brand-loader" role="status" aria-live="polite">
+      <div className="logo-mark brand-loader-mark"><EduPayMark/></div>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 // ── PageError ─────────────────────────────────────────────────
 export function PageError({ msg, onRetry }) {
-  const { RefreshCw } = require("lucide-react");
   return (
     <div className="empty-state">
       <div className="empty-icon">

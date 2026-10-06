@@ -4,6 +4,7 @@ import { Globe, User, Mail, Phone, Lock, Eye, EyeOff,
          AlertCircle, ChevronRight, RefreshCw } from "lucide-react";
 import { FileText, Building2, Wallet, GraduationCap } from "lucide-react";
 import { authApi } from "../api/auth";
+import EduPayMark from "../components/EduPayMark";
 
 export default function AuthPage({ onLogin, onRegister }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -131,7 +132,7 @@ export default function AuthPage({ onLogin, onRegister }) {
         <div className="auth-left">{ /* same left content */ }
           <div style={{ position: "relative", zIndex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 36 }}>
-              <div className="logo-mark"><Globe size={18} color="#fff"/></div>
+              <div className="logo-mark"><EduPayMark/></div>
               <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>
                 EduPay<span style={{ opacity: .6 }}>.ng</span>
               </span>
@@ -159,7 +160,7 @@ export default function AuthPage({ onLogin, onRegister }) {
         <div className="auth-right">
           <div className="auth-form-wrap">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 24 }}>
-              <div className="logo-mark"><Globe size={16} color="#fff"/></div>
+              <div className="logo-mark"><EduPayMark/></div>
               <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 16 }}>
                 EduPay<span style={{ color: "var(--blue)" }}>.ng</span>
               </span>
@@ -277,7 +278,7 @@ export default function AuthPage({ onLogin, onRegister }) {
       <div className="auth-left">
         <div style={{ position: "relative", zIndex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 36 }}>
-            <div className="logo-mark"><Globe size={18} color="#fff"/></div>
+            <div className="logo-mark"><EduPayMark/></div>
             <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>
               EduPay<span style={{ opacity: .6 }}>.ng</span>
             </span>
@@ -306,7 +307,7 @@ export default function AuthPage({ onLogin, onRegister }) {
       <div className="auth-right">
         <div className="auth-form-wrap">
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 28 }}>
-            <div className="logo-mark"><Globe size={16} color="#fff"/></div>
+            <div className="logo-mark"><EduPayMark/></div>
             <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 16 }}>
               EduPay<span style={{ color: "var(--blue)" }}>.ng</span>
             </span>

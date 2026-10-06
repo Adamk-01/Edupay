@@ -1,7 +1,8 @@
 // src/pages/AdminLogin.jsx
 import { useState } from "react";
-import { Globe, Mail, Lock, Eye, EyeOff, Shield, AlertCircle, RefreshCw } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Shield, AlertCircle, RefreshCw } from "lucide-react";
 import { http, adminToken } from "../api/client";
+import EduPayMark from "../components/EduPayMark";
 
 export default function AdminLogin({ onLogin }) {
   const [email,   setEmail]   = useState("");
@@ -28,8 +29,8 @@ export default function AdminLogin({ onLogin }) {
     <div style={{ minHeight: "100vh", background: "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-          <div style={{ width: 36, height: 36, background: "var(--blue)", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Globe size={18} color="#fff"/>
+          <div className="sb-logo-mark" style={{ width: 36, height: 36, borderRadius: 9 }}>
+            <EduPayMark/>
           </div>
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 17, color: "#fff" }}>
             EduPay<span style={{ color: "#60A5FA" }}>.ng</span>{" "}

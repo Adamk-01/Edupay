@@ -23,7 +23,8 @@ svg { flex-shrink: 0; }
 .admin-wrap { display: flex; min-height: 100vh; }
 .sidebar { width: var(--sidebar-w); min-height: 100vh; background: var(--ink); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; z-index: 100; }
 .sb-logo { padding: 20px 18px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.07); }
-.sb-logo-mark { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.sb-logo-mark { width: 32px; height: 32px; background: linear-gradient(145deg, #2563EB, #0D2E8A); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+.sb-logo-mark svg { width: 100%; height: 100%; }
 .sb-logo-text { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; color: #fff; letter-spacing: -.2px; }
 .sb-logo-text span { color: #60A5FA; }
 .sb-badge { margin-left: auto; background: rgba(239,68,68,.2); color: #FCA5A5; font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 20px; letter-spacing: .04em; }
@@ -158,3 +159,75 @@ tbody tr:hover td { background: var(--bg); }
 .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+html { min-width: 320px; }
+body { min-width: 320px; min-height: 100vh; min-height: 100dvh; }
+.admin-wrap { min-height: 100vh; min-height: 100dvh; }
+.main, .page, .card { min-width: 0; }
+.tbl-wrap { max-width: 100%; -webkit-overflow-scrolling: touch; }
+button, a, select { touch-action: manipulation; }
+.admin-sidebar-overlay { display: none; }
+.mobile-menu-btn { display: none; }
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: min(var(--sidebar-w), 86vw);
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    z-index: 201;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.2); }
+  .admin-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    border: 0;
+    background: rgba(15,23,42,.48);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .admin-sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+  .main { margin-left: 0; width: 100%; }
+  .mobile-menu-btn { display: flex; flex: 0 0 42px; width: 42px; height: 42px; }
+  .topbar { gap: 10px; padding: 0 14px; }
+  .topbar-left { flex-direction: row; align-items: center; gap: 10px; min-width: 0; }
+  .topbar-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-right { gap: 7px; }
+  .page { padding: 18px 14px; }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-row { grid-template-columns: 1fr; }
+  .search-bar { flex-wrap: wrap; }
+  .search-bar > :not(.input-icon) { flex: 1 1 auto; }
+  .tabs-row { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab-btn { flex: 0 0 auto; white-space: nowrap; }
+  .toast-wrap { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 12px; }
+  .toast { max-width: 100%; }
+  .form-input, .form-select, .form-textarea { font-size: 16px; }
+  button, .btn, .sb-item, .tab-btn, .tb-btn { min-width: 42px; min-height: 42px; }
+}
+
+@media (max-width: 480px) {
+  .topbar { padding-right: 10px; padding-left: 10px; }
+  .topbar-sub { display: none; }
+  .topbar-right { gap: 5px; }
+  .tb-btn, .admin-av { width: 32px; height: 32px; }
+  .page { padding: 14px 10px; }
+  .stat-card { padding: 14px 12px; }
+  .card-pad { padding: 16px 14px; }
+  .card-hdr { padding: 12px 14px; gap: 8px; }
+  .modal-backdrop { padding: 10px; align-items: flex-end; }
+  .modal { max-height: 92vh; max-height: 92dvh; border-radius: 16px 16px 10px 10px; }
+  .modal-hdr { padding: 16px 16px 0; }
+  .modal-body { padding: 16px; }
+  .modal-footer { padding: 0 16px 16px; flex-wrap: wrap; }
+  .modal-footer .btn { flex: 1 1 auto; justify-content: center; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .pagination { gap: 8px; padding: 10px; }
+}

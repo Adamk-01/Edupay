@@ -4,7 +4,8 @@ import hashlib
 import hmac
 import logging
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -65,15 +66,17 @@ async def send_verify_otp(
     current_user.otp_expires_at     = datetime.now(timezone.utc) + timedelta(minutes=10)
     db.commit()
 
-    _send_smtp(
-        current_user.email,
-        "Your EduPay Email Verification Code",
-        f"<div style='font-family:sans-serif;max-width:520px;margin:0 auto'>"
-        f"<h2 style='color:#1A56DB'>Verify Your Email</h2>"
-        f"<p>Hi {current_user.full_name}, use the code below to verify your email. It expires in 10 minutes.</p>"
-        f"<div style='font-size:36px;font-weight:800;letter-spacing:.15em;color:#1A56DB;margin:24px 0'>{raw_otp}</div>"
-        f"<p style='color:#64748B;font-size:13px'>If you didn't request this, ignore this email.</p></div>",
+    sent = await run_in_threadpool(
+        send_verification_email, current_user.email, current_user.full_name, raw_otp
     )
+    if not sent:
+        current_user.verification_otp = None
+        current_user.otp_expires_at = None
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="We could not send the verification email. Check the SMTP settings and try again.",
+        )
     return {"message": "Verification code sent to your email"}
 
 
@@ -131,7 +134,8 @@ async def request_password_reset(
     user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     db.commit()
 
-    _send_smtp(
+    sent = await run_in_threadpool(
+        _send_smtp,
         user.email,
         "Reset your EduPay password",
         f"<div style='font-family:sans-serif;max-width:520px;margin:0 auto'>"
@@ -140,6 +144,14 @@ async def request_password_reset(
         f"<div style='font-size:36px;font-weight:800;letter-spacing:.15em;color:#1A56DB;margin:24px 0'>{raw_otp}</div>"
         f"<p style='color:#64748B;font-size:13px'>If you did not request this, you can safely ignore this email.</p></div>",
     )
+    if not sent:
+        user.verification_otp = None
+        user.otp_expires_at = None
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="We could not send the reset email. Check the SMTP settings and try again.",
+        )
     return {"message": "If an account exists for this email, a reset code has been sent."}
 
 
@@ -190,7 +202,6 @@ async def confirm_password_reset(
 async def register(
     request: Request,
     data: RegisterRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     if db.query(User).filter(User.email == data.email).first():
@@ -202,6 +213,7 @@ async def register(
             if decrypt(raw_phone) == data.phone:
                 raise HTTPException(status_code=409, detail="Phone number already registered")
 
+    raw_otp = f"{secrets.randbelow(900000) + 100000:06d}"
     user = User(
         full_name=data.full_name,
         email=data.email,
@@ -209,6 +221,8 @@ async def register(
         hashed_password=hash_password(data.password),
         referral_code=_generate_referral_code(data.full_name),
         referred_by=data.referral_code,
+        verification_otp=_hash_otp(raw_otp),
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
     )
     db.add(user)
     db.flush()
@@ -218,7 +232,12 @@ async def register(
     db.commit()
     db.refresh(user)
 
-    background_tasks.add_task(send_verification_email, user.email, user.full_name)
+    sent = await run_in_threadpool(send_verification_email, user.email, user.full_name, raw_otp)
+    if not sent:
+        raise HTTPException(
+            status_code=503,
+            detail="Your account was created, but the verification email could not be delivered. Sign in and request a new code after SMTP is fixed.",
+        )
 
     return {
         "access_token":  create_access_token({"sub": str(user.id)}),

@@ -72,14 +72,8 @@ export const consultationApi = {
 };
 
 export const arewaApi = {
-  getStatus:        ()                  => http.get("/arewa/status"),
   getCatalog:       ()                  => http.get("/arewa/catalog"),
-  getCategories:    ()                  => http.get("/arewa/categories"),
-  getServices:      (category)          => http.get(`/arewa/services/${encodeURIComponent(category)}`),
   getServiceDetail: (category, service) => http.get(`/arewa/services/${encodeURIComponent(category)}/${encodeURIComponent(service)}`),
   purchase:         (data)              => http.post("/arewa/manual/purchase", data),
-  verifyNin:        (data)              => http.post("/arewa/verification/nin", data),
-  purchaseScratchCard: (data)           => http.post("/arewa/scratch-card/purchase", data),
-  verify:           (type, data)        => http.post(`/arewa/verification/${encodeURIComponent(type)}`, data),
   getHistory:       ()                  => http.get("/arewa/history"),
 };

@@ -1,5 +1,6 @@
 import logging
 import smtplib
+from html import escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
@@ -109,14 +110,13 @@ def _brand_wrap(content: str) -> str:
 </html>"""
 
 
-def send_verification_email(email: str, name: str):
+def send_verification_email(email: str, name: str, code: str) -> bool:
     content = f"""
-      <h2 style="margin:0 0 8px;color:#1A56DB;font-size:22px;">Welcome to EduPay.ng, {name}! 🎓</h2>
-      <p style="color:#475569;margin:0 0 20px;">Your account has been created. Please verify your email to unlock full access.</p>
-      <a href="{settings.FRONTEND_URL}" style="background:#1A56DB;color:#fff;padding:12px 28px;border-radius:8px;
-        text-decoration:none;display:inline-block;font-weight:700;font-size:15px;">Open EduPay.ng</a>
+      <h2 style="margin:0 0 8px;color:#1A56DB;font-size:22px;">Verify your EduPay.ng email</h2>
+      <p style="color:#475569;margin:0 0 20px;">Hi {escape(name)}, enter this code in EduPay to verify your email. It expires in 10 minutes.</p>
+      <div style="font-size:36px;font-weight:800;letter-spacing:.15em;color:#1A56DB;margin:24px 0">{escape(code)}</div>
       <p style="color:#94A3B8;font-size:12px;margin:20px 0 0;">If you didn't create this account, you can safely ignore this email.</p>"""
-    _send_smtp(email, "Welcome to EduPay.ng — Verify your account", _brand_wrap(content))
+    return _send_smtp(email, "Your EduPay.ng email verification code", _brand_wrap(content))
 
 
 def send_wallet_funded_email(email: str, name: str, amount: float, reference: str, new_balance: float):

@@ -1,18 +1,12 @@
 // src/components/Topbar.jsx
 import { useState, useRef, useEffect } from "react";
-import { Bell, HelpCircle, CheckCheck, X, MessageSquare, PhoneCall, FileQuestion, ExternalLink, Menu } from "lucide-react";
+import { Bell, HelpCircle, X, MessageSquare, PhoneCall, FileQuestion, ExternalLink, Menu } from "lucide-react";
 import { NAV_ITEMS } from "./Sidebar";
-
-const MOCK_NOTIFS = [
-  { id: 1, title: "Order Completed", msg: "Your WAEC Result PIN (Serial: W2026-9901) was issued successfully.", time: "10 mins ago", read: false },
-  { id: 2, title: "Wallet Funded", msg: "Wallet top-up of ₦15,000.00 via Monnify received.", time: "2 hours ago", read: false },
-  { id: 3, title: "Admission News Alert", msg: "JAMB 2026 Direct Entry Cut-off marks released. Check Edu News.", time: "1 day ago", read: true },
-];
 
 export default function Topbar({ page, user, onToggleMenu }) {
   const [showNotif, setShowNotif] = useState(false);
   const [showHelp, setShowHelp]   = useState(false);
-  const [notifs, setNotifs]       = useState(MOCK_NOTIFS);
+  const notifs = [];
   
   const notifRef = useRef(null);
   const found    = NAV_ITEMS.find(n => n.id === page);
@@ -20,11 +14,7 @@ export default function Topbar({ page, user, onToggleMenu }) {
     .split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const firstName = (user?.full_name || user?.name || "").split(" ")[0];
 
-  const unreadCount = notifs.filter(n => !n.read).length;
-
-  function markAllRead() {
-    setNotifs(notifs.map(n => ({ ...n, read: true })));
-  }
+  const unreadCount = 0;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -85,11 +75,6 @@ export default function Topbar({ page, user, onToggleMenu }) {
           }}>
             <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 700, fontSize: 14, fontFamily: "'Syne', sans-serif" }}>Notifications</div>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} style={{ background: "none", border: "none", color: "var(--blue)", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                  <CheckCheck size={13}/> Mark all read
-                </button>
-              )}
             </div>
             <div style={{ maxHeight: 300, overflowY: "auto" }}>
               {notifs.length === 0 ? (
@@ -188,4 +173,3 @@ export default function Topbar({ page, user, onToggleMenu }) {
     </div>
   );
 }
-

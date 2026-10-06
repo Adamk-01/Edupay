@@ -1,7 +1,8 @@
 // src/components/Sidebar.jsx
 import { NavLink, Link } from "react-router-dom";
 import { LayoutDashboard, Wallet, FileText, Building2, Zap,
-         Newspaper, GraduationCap, Clock, User, LogOut, Settings, Globe, Layers3, ShieldCheck } from "lucide-react";
+         Newspaper, GraduationCap, Clock, User, LogOut, Settings, Layers3, ShieldCheck } from "lucide-react";
+import EduPayMark from "./EduPayMark";
 
 export const NAV_ITEMS = [
   { id: "dashboard",     path: "/",                Icon: LayoutDashboard, label: "Dashboard",       group: "main"     },
@@ -29,7 +30,7 @@ export default function Sidebar({ onLogout, isOpen, onClose }) {
       <div className={`sidebar-overlay ${isOpen ? "open" : ""}`} onClick={onClose} />
       <div className={`sidebar ${isOpen ? "open" : ""}`}>
         <Link to="/" className="sidebar-logo" style={{ textDecoration: "none" }} onClick={onClose}>
-          <div className="logo-mark"><Globe size={17} color="#fff"/></div>
+          <div className="logo-mark"><EduPayMark/></div>
           <div className="logo-text">Edu<span>Pay</span>.ng</div>
         </Link>
 

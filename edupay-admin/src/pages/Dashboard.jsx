@@ -16,13 +16,6 @@ export default function Dashboard() {
     { Icon: Activity, label: "Active Sessions", val: fmtNum(s.consultations?.active),  trend: `${s.consultations?.total || 0} total`,       up: true,  bg: "#F5F3FF", ic: "#7C3AED" },
   ] : [];
 
-  const revenueBreakdown = [
-    { label: "Exam PINs",     val: 68, color: "var(--blue)"   },
-    { label: "School Forms",  val: 14, color: "var(--green)"  },
-    { label: "Bills / VTU",   val: 11, color: "var(--amber)"  },
-    { label: "Consultations", val: 7,  color: "var(--purple)" },
-  ];
-
   if (error) return <div className="page"><PageError msg={error} onRetry={refetch}/></div>;
 
   return (
@@ -49,24 +42,7 @@ export default function Dashboard() {
             ))}
       </div>
 
-      <div className="grid-2" style={{ marginBottom: 22 }}>
-        {/* Revenue breakdown */}
-        <div className="card card-pad">
-          <div className="card-title" style={{ marginBottom: 16 }}>Revenue Breakdown</div>
-          {revenueBreakdown.map(r => (
-            <div key={r.label} style={{ marginBottom: 13 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 4 }}>
-                <span style={{ color: "var(--text-2)", fontWeight: 500 }}>{r.label}</span>
-                <span style={{ fontWeight: 700 }}>{r.val}%</span>
-              </div>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${r.val}%`, background: r.color }}/>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Platform summary */}
+      <div style={{ marginBottom: 22 }}>
         <div className="card">
           <div className="card-hdr"><div className="card-title">Platform Summary</div></div>
           <div style={{ padding: "0 16px" }}>
